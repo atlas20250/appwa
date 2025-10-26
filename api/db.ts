@@ -2,32 +2,33 @@ import { sql } from '@vercel/postgres';
 import { User, MeterReading, Bill, UserRole, BillStatus, Announcement, InvoiceSummary, ReportData, BillWithUser } from '../types.ts';
 
 // Construct Prisma client by trying the installed package first, then falling back to the generated client file.
-// Lazy Prisma client getter to avoid module-load issues under ts-node/esm.
-let _prisma: any = undefined;
+// Lazy Prisma client getter ensures compatibility with environments that don't allow top-level await (e.g. Netlify functions).
+let prismaInstance: any | null = null;
+let prismaCtorPromise: Promise<any> | null = null;
+
+const loadPrismaCtor = async () => {
+    if (prismaCtorPromise) return prismaCtorPromise;
+
+    prismaCtorPromise = (async () => {
+        let mod: any;
+        try {
+            mod = await import('@prisma/client');
+        } catch (e) {
+            // fall back to the generated client
+            mod = await import('../generated/prisma/index.js');
+        }
+        return mod?.PrismaClient || mod?.default?.PrismaClient || mod?.default || mod;
+    })();
+
+    return prismaCtorPromise;
+};
+
 async function getPrisma() {
-    if (_prisma) return _prisma;
-    let mod: any;
-    try {
-        mod = await import('@prisma/client');
-    } catch (e) {
-        // fall back to the generated client
-        mod = await import('../generated/prisma/index.js');
-    }
-    const ClientCtor = mod?.PrismaClient || mod?.default?.PrismaClient || mod?.default || mod;
-    _prisma = new ClientCtor();
-    return _prisma;
+    if (prismaInstance) return prismaInstance;
+    const PrismaClientCtor = await loadPrismaCtor();
+    prismaInstance = new PrismaClientCtor();
+    return prismaInstance;
 }
-let prisma = await getPrisma();
-let PrismaClientCtor: any;
-try {
-    const pkg = await import('@prisma/client');
-    PrismaClientCtor = pkg?.PrismaClient || pkg?.default || pkg;
-} catch (e) {
-    // Import the generated client's index.js explicitly to avoid directory import errors under ESM
-    const local = await import('../generated/prisma/index.js');
-    PrismaClientCtor = local?.PrismaClient || local?.default || local;
-}
-prisma = new PrismaClientCtor();
 
 // Helper for mapping raw SQL results to camelCase object properties.
 // Note: @vercel/postgres can sometimes handle this automatically, but being explicit prevents issues.
