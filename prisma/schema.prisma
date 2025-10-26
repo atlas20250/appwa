@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  super_admin
+  admin
+  user
+}
+
+enum BillStatus {
+  unpaid
+  paid
+  overdue
+  pending_approval
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  name         String         @db.VarChar(255)
+  address      String         @db.VarChar(255)
+  phoneNumber  String         @unique @map("phone_number") @db.VarChar(255)
+  meterId      String         @unique @map("meter_id") @db.VarChar(255)
+  role         UserRole
+  password     String         @db.VarChar(255)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  meterReadings MeterReading[]
+  bills        Bill[]
+}
+
+model MeterReading {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  reading         Int
+  date            DateTime  @db.Timestamptz(6)
+  previousReading Int       @map("previous_reading")
+  consumption     Int
+  meterImage      String?   @map("meter_image") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bills           Bill[]
+}
+
+model Bill {
+  id           String      @id @default(uuid()) @db.Uuid
+  userId       String      @map("user_id") @db.Uuid
+  readingId    String      @map("reading_id") @db.Uuid
+  amount       Decimal     @db.Decimal(10, 2)
+  issueDate    DateTime    @map("issue_date") @db.Timestamptz(6)
+  dueDate      DateTime    @map("due_date") @db.Timestamptz(6)
+  status       BillStatus
+  consumption  Int
+  meterImage   String?     @map("meter_image") @db.Text
+  paymentDate  DateTime?   @map("payment_date") @db.Timestamptz(6)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meterReading MeterReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+}
+
+model Announcement {
+  id        String   @id @default(uuid()) @db.Uuid
+  message   String   @db.Text
+  date      DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+}
+
+model Setting {
+  key   String @id @db.VarChar(255)
+  value String @db.VarChar(255)
+}
